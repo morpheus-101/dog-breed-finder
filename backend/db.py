@@ -1,5 +1,6 @@
 """Database access layer. DB_MODE=local uses breeds.db (sqlite3); DB_MODE=turso uses Turso HTTP API (httpx)."""
 
+import logging
 import os
 import sqlite3
 from pathlib import Path
@@ -8,6 +9,8 @@ import httpx
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_DB_PATH = PROJECT_ROOT / "breeds.db"
@@ -65,7 +68,15 @@ def _coerce_turso_value(col_name: str, value):
     if col_name in REAL_COLUMNS:
         return float(value)
     if col_name in INTEGER_COLUMNS:
-        return int(value)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            logger.warning(
+                "Could not cast column %r value %r to int; returning as-is",
+                col_name,
+                value,
+            )
+            return value
     return value
 
 

@@ -12,6 +12,62 @@ load_dotenv()
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 LOCAL_DB_PATH = PROJECT_ROOT / "breeds.db"
 
+# Turso's HTTP API returns every column value as a string. SQLite (local dev)
+# returns native types already, so this coercion only applies to the Turso path.
+REAL_COLUMNS = {
+    "height_min_cm",
+    "height_max_cm",
+    "weight_min_kg",
+    "weight_max_kg",
+}
+
+INTEGER_COLUMNS = {
+    "popularity_rank",
+    "life_expectancy_min",
+    "life_expectancy_max",
+    "energy_level",
+    "trainability",
+    "shedding_level",
+    "grooming_frequency",
+    "good_with_strangers",
+    "hypoallergenic",
+    "grooming_cost_tier",
+    "exercise_min_per_day",
+    "monthly_food_cost_usd",
+    "vet_cost_tier",
+    "monthly_total_cost_usd",
+    "playfulness",
+    "affection_level",
+    "intelligence",
+    "independence",
+    "barking_level",
+    "protective_instinct",
+    "separation_anxiety",
+    "good_with_kids",
+    "good_with_dogs",
+    "good_with_cats",
+    "good_with_elderly",
+    "apartment_suitable",
+    "needs_yard",
+    "heat_tolerance",
+    "cold_tolerance",
+    "urban_suitable",
+    "first_time_owner_suitable",
+    "experience_required",
+    "guard_dog",
+    "working_dog",
+}
+
+
+def _coerce_turso_value(col_name: str, value):
+    if value is None:
+        return None
+    if col_name in REAL_COLUMNS:
+        return float(value)
+    if col_name in INTEGER_COLUMNS:
+        return int(value)
+    return value
+
 
 def _get_all_breeds_local() -> list[dict]:
     conn = sqlite3.connect(LOCAL_DB_PATH)
@@ -49,7 +105,7 @@ def _get_all_breeds_turso() -> list[dict]:
     for row in rows:
         breed = {}
         for col_name, cell in zip(columns, row):
-            breed[col_name] = cell.get("value")
+            breed[col_name] = _coerce_turso_value(col_name, cell.get("value"))
         breeds.append(breed)
     return breeds
 

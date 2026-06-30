@@ -1,0 +1,21 @@
+.step {
+  max-width: 560px;
+  margin: 0 auto;
+  width: 100%;
+  text-align: left;
+}
+
+.title {
+  margin-bottom: 6px;
+}
+
+.subtitle {
+  color: var(--color-text-muted);
+  margin-bottom: 28px;
+  font-size: 0.98rem;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+}

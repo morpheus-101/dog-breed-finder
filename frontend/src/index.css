@@ -1,0 +1,91 @@
+:root {
+  /* Warm, earthy palette */
+  --color-bg: #fbf6ee;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f3ece0;
+  --color-text: #4a3f35;
+  --color-text-muted: #8a7b6c;
+  --color-heading: #3c2f25;
+  --color-border: #e7dccb;
+
+  --color-primary: #c2703d;
+  --color-primary-dark: #a85c2c;
+  --color-primary-bg: rgba(194, 112, 61, 0.1);
+
+  --color-accent: #6f8f5b;
+  --color-accent-dark: #5a7549;
+  --color-accent-bg: rgba(111, 143, 91, 0.12);
+
+  --color-error: #b0503f;
+  --color-error-bg: rgba(176, 80, 63, 0.1);
+
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+
+  --shadow-card: 0 4px 16px rgba(60, 47, 37, 0.08);
+  --shadow-card-hover: 0 8px 24px rgba(60, 47, 37, 0.14);
+
+  --font-body: 'Quicksand', system-ui, sans-serif;
+
+  color-scheme: light;
+  color: var(--color-text);
+  background: var(--color-bg);
+  font: 16px/1.55 var(--font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-body);
+  font-weight: 700;
+  color: var(--color-heading);
+  margin: 0;
+}
+
+h1 {
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+h2 {
+  font-size: 1.5rem;
+  letter-spacing: -0.01em;
+}
+
+h3 {
+  font-size: 1.1rem;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font-family: var(--font-body);
+}
+
+button:focus-visible,
+input:focus-visible,
+[tabindex]:focus-visible {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}

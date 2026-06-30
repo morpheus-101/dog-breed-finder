@@ -1,0 +1,21 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 28px;
+}
+
+.label {
+  font-weight: 600;
+  font-size: 1.05rem;
+  color: var(--color-heading);
+}
+
+.hint {
+  font-size: 0.88rem;
+  color: var(--color-text-muted);
+}
+
+.control {
+  margin-top: 6px;
+}

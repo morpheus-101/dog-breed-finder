@@ -1,0 +1,60 @@
+.wrapper {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 48px 20px 64px;
+}
+
+.nav {
+  max-width: 560px;
+  margin: 32px auto 0;
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.backButton,
+.nextButton {
+  font-family: var(--font-body);
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 13px 28px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  border: none;
+  transition:
+    transform 0.1s ease,
+    opacity 0.15s ease;
+}
+
+.backButton {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.backButton:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nextButton {
+  background: var(--color-primary);
+  color: #fff;
+  margin-left: auto;
+}
+
+.nextButton:hover {
+  background: var(--color-primary-dark);
+}
+
+.backButton:not(:disabled):active,
+.nextButton:active {
+  transform: scale(0.97);
+}
+
+@media (max-width: 480px) {
+  .wrapper {
+    padding: 32px 16px 48px;
+  }
+}

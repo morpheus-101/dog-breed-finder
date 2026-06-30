@@ -1,0 +1,99 @@
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  cursor: grab;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.item:active {
+  cursor: grabbing;
+}
+
+.dragging {
+  opacity: 0.5;
+  border-color: var(--color-primary);
+}
+
+.rank {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--color-accent-bg);
+  color: var(--color-accent-dark);
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+}
+
+.handle {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 1.2rem;
+  user-select: none;
+}
+
+.text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.traitLabel {
+  font-weight: 600;
+  color: var(--color-heading);
+}
+
+.traitDescription {
+  font-size: 0.82rem;
+  color: var(--color-text-muted);
+}
+
+.arrows {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.arrowButton {
+  width: 28px;
+  height: 22px;
+  border: none;
+  border-radius: 6px;
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.arrowButton:hover:not(:disabled) {
+  background: var(--color-accent-bg);
+  color: var(--color-accent-dark);
+}
+
+.arrowButton:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}

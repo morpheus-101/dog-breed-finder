@@ -165,6 +165,7 @@ Read these before working in their domain — do not guess:
 - `skills/api-contract.md` — **authoritative `/recommend` API contract**, read before writing any backend code for request handling, Layer 1 filtering, Layer 2 scoring, or Layer 3 Groq integration.
 - `skills/venv-setup.md` — read before running any Python script or installing dependencies.
 - `skills/git-commit.md` — read whenever the user asks to commit or push code changes.
+- `skills/frontend.md` — read before building any part of the React frontend.
 
 ---
 

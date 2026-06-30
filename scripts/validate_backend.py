@@ -1,14 +1,21 @@
 """Living validation script for backend/. See skills/backend-validation.md.
 
-Uses breeds.db (local SQLite) for all tests — never Turso. No real Groq calls
-(backend/groq_client.py is mocked). Run after every change to backend/.
+Uses breeds.db (local SQLite) for all tests — never Turso. backend/groq_client.py's
+real Groq API call (_call_groq) is patched out for every request in this script so
+no real Groq calls are ever made during validation. Run after every change to backend/.
 """
 
+import json
 import os
+import re
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 os.environ["DB_MODE"] = "local"
+# groq_client.py raises RuntimeError at import time if GROQ_API_KEY is unset.
+# The real Groq call is patched out below, so this key is never actually used.
+os.environ.setdefault("GROQ_API_KEY", "test-key-not-used-real-calls-are-mocked")
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -19,6 +26,27 @@ from backend.main import app  # noqa: E402
 from backend import db as backend_db  # noqa: E402
 
 client = TestClient(app)
+
+
+def _mock_groq_call(prompt: str) -> str:
+    """Realistic stand-in for groq_client._call_groq: extracts the breed names
+    groq_client put into the prompt and returns a valid re-ranked JSON array,
+    same shape a real Groq response would have."""
+    breeds_section = prompt.split("Candidate breeds")[1].split("Re-rank these breeds")[0]
+    breed_names = re.findall(r"^- (.+?): ", breeds_section, re.MULTILINE)
+    mock_results = [
+        {
+            "breed_name": name,
+            "rank": i + 1,
+            "match_explanation": f"{name} fits well with your lifestyle profile.",
+        }
+        for i, name in enumerate(breed_names)
+    ]
+    return json.dumps(mock_results)
+
+
+groq_patch = patch("backend.groq_client._call_groq", side_effect=_mock_groq_call)
+groq_patch.start()
 
 ALL_TRAITS = [
     "energy_level",
@@ -217,6 +245,27 @@ if ok:
         )
 check("response shape: all fields present with correct types", shape_ok)
 
+# 11. Groq returns malformed JSON -> fallback to Layer 2 order, still 200
+with patch("backend.groq_client._call_groq", return_value="not valid json {{{"):
+    resp = client.post("/recommend", json=base_request())
+ok = resp.status_code == 200
+body = resp.json() if ok else {}
+fallback_ok = (
+    ok
+    and len(body.get("results", [])) > 0
+    and all(
+        r["match_explanation"] == "Match determined by lifestyle scoring."
+        for r in body.get("results", [])
+    )
+    and [r["rank"] for r in body["results"]] == list(range(1, len(body["results"]) + 1))
+)
+check(
+    "Groq malformed JSON -> 200 with Layer 2 order fallback",
+    fallback_ok,
+    detail=f"status={resp.status_code} body={resp.text[:300]}" if not fallback_ok else "",
+)
+
+groq_patch.stop()
 
 print()
 print(f"{len(passed)} passed, {len(failed)} failed")

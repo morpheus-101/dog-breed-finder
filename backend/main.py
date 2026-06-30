@@ -7,6 +7,7 @@ import os
 from typing import Literal, Optional
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
 from backend import db, filters, groq_client, scoring
@@ -21,6 +22,20 @@ VALID_TRAITS = {
 }
 
 app = FastAPI()
+
+_allowed_origins_env = os.environ.get("ALLOWED_ORIGINS")
+_allow_origins = (
+    [origin.strip() for origin in _allowed_origins_env.split(",")]
+    if _allowed_origins_env
+    else ["*"]
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allow_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 class HardFilters(BaseModel):

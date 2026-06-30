@@ -4,3 +4,4 @@ __pycache__/
 *.pyc
 breeds.db
 .DS_Store
+.claude/.validate_backend_passed

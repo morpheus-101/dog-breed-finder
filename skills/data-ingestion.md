@@ -41,10 +41,10 @@ Read this file before writing any database schema, ingestion script, or data pip
 | `barking_level` | INTEGER | Claude batch | Yes |
 | `protective_instinct` | INTEGER | Claude batch | Yes |
 | `separation_anxiety` | INTEGER | Claude batch | Yes |
-| `good_with_kids` | INTEGER (0/1) | Claude batch | Yes |
-| `good_with_dogs` | INTEGER (0/1) | Claude batch | Yes |
-| `good_with_cats` | INTEGER (0/1) | Claude batch | Yes |
-| `good_with_elderly` | INTEGER (0/1) | Claude batch | Yes |
+| `good_with_kids` | INTEGER (0/1) — boolean, not 1–5 scored | Claude batch | Yes |
+| `good_with_dogs` | INTEGER (0/1) — boolean, not 1–5 scored | Claude batch | Yes |
+| `good_with_cats` | INTEGER (0/1) — boolean, not 1–5 scored | Claude batch | Yes |
+| `good_with_elderly` | INTEGER (0/1) — boolean, not 1–5 scored | Claude batch | Yes |
 | `apartment_suitable` | INTEGER (0/1) | Claude batch | Yes |
 | `needs_yard` | INTEGER (0/1) | Claude batch | Yes |
 | `heat_tolerance` | INTEGER | Claude batch | Yes |

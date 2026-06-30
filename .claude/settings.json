@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash scripts/stop_hook_validate_backend.sh",
+            "statusMessage": "Validating backend changes..."
+          }
+        ]
+      }
+    ]
+  }
+}

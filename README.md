@@ -339,3 +339,4 @@ This is a v1, and some things were deliberately left out of scope:
 - **No analytics or usage tracking.**
 - **The breed database is static.** It was built once via the data pipeline above and loaded into Turso; there's no scheduled re-ingestion or auto-update process.
 - **Groq's free tier rate limits apply** (30 requests/minute, 14k requests/day at time of writing). There's no paid-tier fallback or request queuing.
+

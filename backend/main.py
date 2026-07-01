@@ -166,8 +166,8 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
                 image_url=_resolve_image_url(breed),
                 key_stats=KeyStats(
                     size_category=breed["size_category"],
-                    energy_level=breed["energy_level"],
-                    monthly_total_cost_usd=breed["monthly_total_cost_usd"],
+                    energy_level=breed["energy_level"] or 0,
+                    monthly_total_cost_usd=breed["monthly_total_cost_usd"] or 0,
                 ),
             )
         )

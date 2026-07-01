@@ -1,15 +1,16 @@
 import styles from './StatusMessage.module.css'
 
-export default function ErrorState({ onRetry }) {
+export default function ErrorState({ onRetry, rateLimited = false }) {
   return (
     <div className={styles.wrapper}>
       <div className={styles.icon} aria-hidden="true">
         🐕
       </div>
-      <h2>Something went wrong</h2>
+      <h2>{rateLimited ? "You're moving fast!" : 'Something went wrong'}</h2>
       <p className={styles.text}>
-        We had trouble finding your matches. Please check your connection and try
-        again.
+        {rateLimited
+          ? 'Please wait a moment before trying again.'
+          : 'We had trouble finding your matches. Please check your connection and try again.'}
       </p>
       <button type="button" className={styles.primaryButton} onClick={onRetry}>
         Try again

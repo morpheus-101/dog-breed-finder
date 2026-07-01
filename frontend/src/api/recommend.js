@@ -13,6 +13,9 @@ export async function fetchRecommendations(requestBody) {
   })
 
   if (!response.ok) {
+    if (response.status === 429) {
+      throw new Error('rate_limited')
+    }
     throw new Error(`Request failed with status ${response.status}`)
   }
 

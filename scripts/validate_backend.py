@@ -27,6 +27,13 @@ from backend import db as backend_db  # noqa: E402
 
 client = TestClient(app)
 
+# The /recommend endpoint is rate-limited (5/minute per IP, see backend/main.py).
+# TestClient always presents the same client IP, so every check below would
+# otherwise accumulate against that limit across the whole script. Reset the
+# limiter before each check so the rate limit itself is only exercised by the
+# dedicated rate-limiting test at the end.
+limiter = app.state.limiter
+
 
 def _mock_groq_call(prompt: str) -> str:
     """Realistic stand-in for groq_client._call_groq: extracts the breed names
@@ -111,6 +118,7 @@ breeds_by_name = get_breeds_by_name()
 
 
 # 1. Happy path
+limiter.reset()
 resp = client.post("/recommend", json=base_request())
 ok = resp.status_code == 200
 body = resp.json() if ok else {}
@@ -134,6 +142,7 @@ check(
 )
 
 # 2. Allergic user
+limiter.reset()
 resp = client.post("/recommend", json=base_request(has_allergies=True))
 ok = resp.status_code == 200
 body = resp.json() if ok else {}
@@ -145,6 +154,7 @@ violators = (
 check("allergic user: no non-hypoallergenic breed in results", ok and not violators, detail=str(violators))
 
 # 3. Apartment, no yard
+limiter.reset()
 resp = client.post(
     "/recommend", json=base_request(property_type="apartment", has_yard=False)
 )
@@ -158,6 +168,7 @@ violators = (
 check("apartment/no-yard user: no needs_yard breed in results", ok and not violators, detail=str(violators))
 
 # 4. Budget filter
+limiter.reset()
 resp = client.post("/recommend", json=base_request(monthly_budget_usd=50))
 ok = resp.status_code == 200
 body = resp.json() if ok else {}
@@ -169,6 +180,7 @@ violators = (
 check("budget=50: no breed over budget in results", ok and not violators, detail=str(violators))
 
 # 5. First time owner
+limiter.reset()
 resp = client.post("/recommend", json=base_request(owner_experience="first_time"))
 ok = resp.status_code == 200
 body = resp.json() if ok else {}
@@ -184,6 +196,7 @@ violators = (
 check("first_time owner: no unsuitable breed in results", ok and not violators, detail=str(violators))
 
 # 6. Invalid trait_priority_ranking — wrong number of items
+limiter.reset()
 req = base_request()
 req["trait_priority_ranking"] = ALL_TRAITS[:4]
 resp = client.post("/recommend", json=req)
@@ -196,6 +209,7 @@ resp = client.post("/recommend", json=req)
 check("invalid ranking (bad trait name) -> 422", resp.status_code == 422, detail=f"status={resp.status_code}")
 
 # 8. Zero-results case
+limiter.reset()
 resp = client.post(
     "/recommend", json=base_request(has_allergies=True, monthly_budget_usd=1)
 )
@@ -213,6 +227,7 @@ check(
 )
 
 # 9. size_strict=true, max_size_category=small
+limiter.reset()
 resp = client.post(
     "/recommend",
     json=base_request(size_strict=True, max_size_category="small"),
@@ -227,6 +242,7 @@ violators = (
 check("size_strict=true/small: no non-small breed in results", ok and not violators, detail=str(violators))
 
 # 10. Response shape — every field present with correct type
+limiter.reset()
 resp = client.post("/recommend", json=base_request())
 ok = resp.status_code == 200
 body = resp.json() if ok else {}
@@ -246,6 +262,7 @@ if ok:
 check("response shape: all fields present with correct types", shape_ok)
 
 # 11. Groq returns malformed JSON -> fallback to Layer 2 order, still 200
+limiter.reset()
 with patch("backend.groq_client._call_groq", return_value="not valid json {{{"):
     resp = client.post("/recommend", json=base_request())
 ok = resp.status_code == 200
@@ -264,6 +281,18 @@ check(
     fallback_ok,
     detail=f"status={resp.status_code} body={resp.text[:300]}" if not fallback_ok else "",
 )
+
+# 12. Rate limiting — 6th request within a minute from the same IP returns 429
+limiter.reset()
+rate_limit_statuses = []
+for _ in range(6):
+    rate_limit_statuses.append(client.post("/recommend", json=base_request()).status_code)
+check(
+    "rate limiting: first 5 requests/min succeed, 6th returns 429",
+    rate_limit_statuses[:5] == [200] * 5 and rate_limit_statuses[5] == 429,
+    detail=f"statuses={rate_limit_statuses}",
+)
+limiter.reset()
 
 groq_patch.stop()
 

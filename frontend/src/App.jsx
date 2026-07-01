@@ -14,6 +14,7 @@ function AppContent() {
   const [results, setResults] = useState([])
   const [emptyMessage, setEmptyMessage] = useState('')
   const [lastSubmittedData, setLastSubmittedData] = useState(null)
+  const [isRateLimited, setIsRateLimited] = useState(false)
 
   async function submitQuestionnaire(formData) {
     setLastSubmittedData(formData)
@@ -23,7 +24,8 @@ function AppContent() {
       setResults(data.results)
       setEmptyMessage(data.message || '')
       setView('results')
-    } catch {
+    } catch (err) {
+      setIsRateLimited(err.message === 'rate_limited')
       setView('error')
     }
   }
@@ -45,6 +47,7 @@ function AppContent() {
     setResults([])
     setEmptyMessage('')
     setLastSubmittedData(null)
+    setIsRateLimited(false)
     setView('questionnaire')
   }
 
@@ -67,7 +70,7 @@ function AppContent() {
             onAdjustAnswers={adjustAnswers}
           />
         )}
-        {view === 'error' && <ErrorState onRetry={retry} />}
+        {view === 'error' && <ErrorState onRetry={retry} rateLimited={isRateLimited} />}
       </main>
     </div>
   )

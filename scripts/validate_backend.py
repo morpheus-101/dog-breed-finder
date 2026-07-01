@@ -1,13 +1,17 @@
 """Living validation script for backend/. See skills/backend-validation.md.
 
-Uses breeds.db (local SQLite) for all tests — never Turso. backend/groq_client.py's
-real Groq API call (_call_groq) is patched out for every request in this script so
-no real Groq calls are ever made during validation. Run after every change to backend/.
+Fully self-contained — does not touch breeds.db or Turso. A temporary in-memory
+SQLite database is seeded with realistic test breed rows below, and
+backend.db.get_all_breeds is patched to return that seeded data for every
+request in this script. backend/groq_client.py's real Groq API call
+(_call_groq) is likewise patched out for every request, so no real Groq or
+Turso calls are ever made during validation. Run after every change to backend/.
 """
 
 import json
 import os
 import re
+import sqlite3
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -24,6 +28,137 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from backend.main import app  # noqa: E402
 from backend import db as backend_db  # noqa: E402
+
+# --- Seed an in-memory SQLite database with realistic test breed data -------
+#
+# The real breeds.db (277 AKC/Dog-API/Claude-derived breeds) is not committed
+# to the repo and doesn't exist in CI, so this script must not depend on it.
+# Instead, seed a throwaway :memory: database with a fixed, hand-authored set
+# of breeds that exercises every hard filter and both scoring-relevant traits,
+# then hand the resulting rows to a mock of backend.db.get_all_breeds so the
+# rest of the script — and backend/main.py's request handling — behaves
+# exactly as it would against a real database.
+_TEST_BREED_COLUMNS = [
+    "id",
+    "breed_name",
+    "size_category",
+    "hypoallergenic",
+    "apartment_suitable",
+    "needs_yard",
+    "monthly_total_cost_usd",
+    "good_with_dogs",
+    "good_with_cats",
+    "good_with_kids",
+    "good_with_elderly",
+    "first_time_owner_suitable",
+    "barking_level",
+    "energy_level",
+    "trainability",
+    "shedding_level",
+    "affection_level",
+    "protective_instinct",
+    "llm_summary",
+    "image_url_1",
+    "image_url_2",
+]
+
+# (breed_name, size, hypoallergenic, apartment_ok, needs_yard, cost,
+#  good_w_dogs, good_w_cats, good_w_kids, good_w_elderly, first_time_ok,
+#  barking, energy, trainability, shedding, affection, protective)
+_TEST_BREED_DATA = [
+    ("Poodle", "medium", 1, 1, 0, 180, 1, 1, 1, 1, 1, 2, 4, 5, 1, 5, 2),
+    ("Bichon Frise", "small", 1, 1, 0, 90, 1, 1, 1, 1, 1, 3, 3, 4, 1, 5, 1),
+    ("Portuguese Water Dog", "medium", 1, 0, 1, 210, 1, 0, 1, 0, 0, 3, 5, 5, 1, 4, 3),
+    ("Labrador Retriever", "large", 0, 0, 1, 150, 1, 1, 1, 1, 1, 3, 5, 5, 4, 5, 3),
+    ("Golden Retriever", "large", 0, 0, 1, 160, 1, 1, 1, 1, 1, 2, 5, 5, 4, 5, 2),
+    ("German Shepherd", "large", 0, 0, 1, 190, 0, 0, 1, 0, 0, 4, 5, 5, 4, 4, 5),
+    ("Chihuahua", "small", 0, 1, 0, 45, 0, 0, 0, 1, 0, 5, 3, 2, 2, 4, 3),
+    ("Yorkshire Terrier", "small", 1, 1, 0, 70, 1, 0, 0, 1, 0, 4, 3, 3, 1, 4, 2),
+    ("Great Dane", "giant", 0, 0, 1, 320, 1, 0, 1, 0, 0, 2, 3, 4, 2, 5, 4),
+    ("Saint Bernard", "giant", 0, 0, 1, 350, 1, 1, 1, 0, 0, 2, 2, 3, 4, 5, 3),
+    ("Beagle", "medium", 0, 1, 0, 110, 1, 0, 1, 1, 1, 5, 4, 3, 3, 4, 2),
+    ("Dachshund", "small", 0, 1, 0, 85, 0, 0, 0, 1, 1, 5, 3, 3, 2, 4, 3),
+    ("Border Collie", "medium", 0, 0, 1, 140, 1, 0, 1, 0, 0, 4, 5, 5, 3, 4, 3),
+    ("Bulldog", "medium", 0, 1, 0, 250, 1, 1, 1, 1, 1, 1, 1, 2, 2, 4, 1),
+    ("Shih Tzu", "small", 1, 1, 0, 95, 1, 1, 1, 1, 1, 2, 2, 3, 1, 5, 1),
+    ("Doberman Pinscher", "large", 0, 0, 1, 175, 0, 0, 0, 0, 0, 3, 5, 5, 2, 4, 5),
+    ("Cavalier King Charles Spaniel", "small", 0, 1, 0, 100, 1, 1, 1, 1, 1, 2, 3, 4, 3, 5, 1),
+    ("Siberian Husky", "large", 0, 0, 1, 145, 1, 0, 1, 0, 0, 3, 5, 3, 5, 4, 2),
+    ("Maltese", "small", 1, 1, 0, 80, 1, 1, 0, 1, 1, 3, 2, 3, 1, 5, 1),
+    ("Rottweiler", "large", 0, 0, 1, 200, 0, 0, 0, 0, 0, 3, 4, 4, 3, 4, 5),
+    ("Pomeranian", "small", 0, 1, 0, 65, 1, 1, 0, 1, 1, 5, 3, 3, 3, 4, 2),
+    ("Newfoundland", "giant", 0, 0, 1, 400, 1, 1, 1, 0, 0, 1, 2, 4, 4, 5, 3),
+]
+
+
+def _build_test_breeds() -> list[dict]:
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    try:
+        conn.execute(
+            f"CREATE TABLE breeds ({', '.join(_TEST_BREED_COLUMNS)})"
+        )
+        rows = [
+            (
+                i + 1,
+                name,
+                size,
+                hypoallergenic,
+                apartment_ok,
+                needs_yard,
+                cost,
+                good_dogs,
+                good_cats,
+                good_kids,
+                good_elderly,
+                first_time_ok,
+                barking,
+                energy,
+                trainability,
+                shedding,
+                affection,
+                protective,
+                f"The {name} is a {size}-sized breed known for its "
+                f"distinctive temperament, making it a great match for "
+                f"the right household.",
+                f"https://example.com/images/{name.lower().replace(' ', '-')}-1.jpg",
+                None,
+            )
+            for i, (
+                name,
+                size,
+                hypoallergenic,
+                apartment_ok,
+                needs_yard,
+                cost,
+                good_dogs,
+                good_cats,
+                good_kids,
+                good_elderly,
+                first_time_ok,
+                barking,
+                energy,
+                trainability,
+                shedding,
+                affection,
+                protective,
+            ) in enumerate(_TEST_BREED_DATA)
+        ]
+        placeholders = ", ".join("?" for _ in _TEST_BREED_COLUMNS)
+        conn.executemany(
+            f"INSERT INTO breeds VALUES ({placeholders})", rows
+        )
+        conn.commit()
+        return [dict(row) for row in conn.execute("SELECT * FROM breeds").fetchall()]
+    finally:
+        conn.close()
+
+
+TEST_BREEDS = _build_test_breeds()
+assert len(TEST_BREEDS) >= 20, "need at least 20 seeded test breeds"
+
+db_patch = patch.object(backend_db, "get_all_breeds", return_value=TEST_BREEDS)
+db_patch.start()
 
 client = TestClient(app)
 
@@ -295,6 +430,7 @@ check(
 limiter.reset()
 
 groq_patch.stop()
+db_patch.stop()
 
 print()
 print(f"{len(passed)} passed, {len(failed)} failed")

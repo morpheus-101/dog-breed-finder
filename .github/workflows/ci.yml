@@ -31,7 +31,7 @@ jobs:
       - name: Install test dependencies
         run: |
           source venv/bin/activate
-          pip install fastapi uvicorn httpx pytest
+          pip install fastapi uvicorn httpx httpx2 pytest
 
       - name: Run backend validation
         run: |

@@ -166,6 +166,7 @@ Read these before working in their domain — do not guess:
 - `skills/venv-setup.md` — read before running any Python script or installing dependencies.
 - `skills/git-commit.md` — read whenever the user asks to commit or push code changes.
 - `skills/frontend.md` — read before building any part of the React frontend.
+- `skills/production-debug.md` — read whenever the user reports a production error, deployment failure, or asks to check logs.
 
 ---
 

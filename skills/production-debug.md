@@ -17,14 +17,16 @@ This skill covers autonomously diagnosing and fixing production issues using log
 
 ## 2. Step 1 — Fetch Logs From Three Sources
 
-**Railway runtime logs** (production errors, 500s, crashes) — fetch from both services explicitly so it works regardless of which service is linked:
+**Railway runtime logs** (production errors, 500s, crashes) — fetch from all four services explicitly so it works regardless of which service is linked:
 
 ```bash
-railway logs --service dog-breed-finder --tail 200 > /tmp/railway_backend_logs.txt
-railway logs --service surprising-tranquility --tail 200 > /tmp/railway_frontend_logs.txt
+railway logs --service backend-production --tail 200 > /tmp/railway_backend_prod_logs.txt
+railway logs --service backend-staging --tail 200 > /tmp/railway_backend_staging_logs.txt
+railway logs --service frontend-production --tail 50 > /tmp/railway_frontend_prod_logs.txt
+railway logs --service frontend-staging --tail 50 > /tmp/railway_frontend_staging_logs.txt
 ```
 
-Read both files during diagnosis. Backend logs take priority since most runtime errors originate there.
+Read all four files during diagnosis. Backend logs take priority since most runtime errors originate there.
 
 **GitHub Actions logs** (CI failures, build errors, test failures):
 
@@ -58,10 +60,11 @@ Read all files immediately after fetching. Do not ask the user what the error is
 
 ## 3. Step 2 — Diagnose
 
-- In `railway_backend_logs.txt`: look for Python tracebacks, `ValueError`, `ValidationError`, `ImportError`, or any line containing `ERROR`.
+- In `railway_backend_prod_logs.txt` / `railway_backend_staging_logs.txt`: look for Python tracebacks, `ValueError`, `ValidationError`, `ImportError`, or any line containing `ERROR`.
 - In `gh_actions_logs.txt`: look for `FAILED`, `Error`, `exit code 1`, or test failure output.
 - Check `/tmp/axiom_errors.txt` for error and warning level events including `groq_fallback` and `coercion_warning`.
 - Check `/tmp/axiom_requests.txt` for performance patterns — if `response_time_ms` is consistently high, that indicates a Groq latency issue rather than a code bug.
+- If the user mentions staging, prioritize `railway_backend_staging_logs.txt` and `railway_frontend_staging_logs.txt`. If the user mentions production, prioritize the `_prod_` files. If unspecified, check all four.
 - Identify the root cause — file name, line number, and nature of the error.
 - If both logs show errors, fix the Railway (runtime) error first — it affects live users.
 
@@ -83,7 +86,7 @@ Read all files immediately after fetching. Do not ask the user what the error is
 - After 2–3 minutes, re-fetch Railway logs to confirm the error is gone:
 
   ```bash
-  railway logs --tail 50 > /tmp/railway_backend_logs_after.txt
+  railway logs --tail 50 > /tmp/railway_backend_prod_logs_after.txt
   ```
 
 - If the error persists, repeat from Step 2.

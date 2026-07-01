@@ -16,6 +16,9 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+
 os.environ["DB_MODE"] = "local"
 # groq_client.py raises RuntimeError at import time if GROQ_API_KEY is unset.
 # The real Groq call is patched out below, so this key is never actually used.
@@ -429,6 +432,202 @@ check(
 )
 limiter.reset()
 
+# --- Property-based tests (hypothesis) ---------------------------------
+#
+# These generate many random inputs per test rather than a single fixed
+# case. Groq and the rate limiter are still mocked/reset the same way as
+# the fixed tests above, so no real external calls happen here either.
+
+HYPOTHESIS_SETTINGS = settings(
+    max_examples=50,
+    deadline=5000,
+    suppress_health_check=[
+        HealthCheck.too_slow,
+        HealthCheck.function_scoped_fixture,
+        HealthCheck.filter_too_much,
+    ],
+)
+
+_soft_context_strategy = st.fixed_dictionaries(
+    {
+        "daily_time_available_min": st.integers(min_value=0, max_value=240),
+        "climate": st.sampled_from(["hot", "cold", "temperate", "varies"]),
+        "outdoor_time_expected": st.sampled_from(["low", "medium", "high"]),
+        "grooming_commitment": st.sampled_from(["low", "medium", "high"]),
+        "prioritize_longevity": st.booleans(),
+        "prioritize_low_vet_costs": st.booleans(),
+        "primary_purpose": st.sampled_from(
+            [
+                "companionship",
+                "family_pet",
+                "guard_protection",
+                "active_sports_partner",
+                "emotional_support",
+            ]
+        ),
+    }
+)
+
+_trait_ranking_strategy = st.permutations(ALL_TRAITS).map(list)
+
+_valid_hard_filters_strategy = st.fixed_dictionaries(
+    {
+        "has_allergies": st.booleans(),
+        "property_type": st.sampled_from(["apartment", "house"]),
+        "has_yard": st.booleans(),
+        "monthly_budget_usd": st.integers(min_value=50, max_value=500),
+        "has_other_dogs": st.booleans(),
+        "has_cats": st.booleans(),
+        "has_kids": st.booleans(),
+        "has_elderly": st.booleans(),
+        "owner_experience": st.sampled_from(["first_time", "some", "experienced"]),
+        "noise_tolerance": st.sampled_from(["low", "medium", "high"]),
+        "max_size_category": st.sampled_from(
+            ["small", "medium", "large", "giant", "no_preference"]
+        ),
+        "size_strict": st.booleans(),
+    }
+)
+
+valid_request_strategy = st.fixed_dictionaries(
+    {
+        "hard_filters": _valid_hard_filters_strategy,
+        "soft_context": _soft_context_strategy,
+        "trait_priority_ranking": _trait_ranking_strategy,
+    }
+)
+
+_REQUIRED_RESULT_KEYS = {"breed_name", "rank", "match_explanation", "image_url", "key_stats"}
+_REQUIRED_KEY_STATS_KEYS = {"size_category", "energy_level", "monthly_total_cost_usd"}
+
+
+# 15. Random valid requests always return correct response shape
+@HYPOTHESIS_SETTINGS
+@given(req=valid_request_strategy)
+def _test_random_valid_requests_shape(req):
+    limiter.reset()
+    resp = client.post("/recommend", json=req)
+    assert resp.status_code == 200, f"status={resp.status_code} body={resp.text[:300]}"
+    body = resp.json()
+    assert {"results", "total_breeds_considered", "breeds_after_hard_filters"} <= set(body.keys())
+    assert body["total_breeds_considered"] == len(TEST_BREEDS)
+    assert body["breeds_after_hard_filters"] <= body["total_breeds_considered"]
+    results = body["results"]
+    assert isinstance(results, list)
+    assert 0 <= len(results) <= 15
+    for i, r in enumerate(results, start=1):
+        assert _REQUIRED_RESULT_KEYS <= set(r.keys())
+        assert r["rank"] == i
+        assert _REQUIRED_KEY_STATS_KEYS <= set(r["key_stats"].keys())
+
+
+try:
+    _test_random_valid_requests_shape()
+    check("property: random valid requests always return correct response shape", True)
+except Exception as exc:  # noqa: BLE001 - hypothesis raises assertion/shrunk failures here
+    check("property: random valid requests always return correct response shape", False, detail=str(exc))
+
+# 16. Hard filters never increase breed count
+@HYPOTHESIS_SETTINGS
+@given(req=valid_request_strategy)
+def _test_hard_filters_never_increase_count(req):
+    limiter.reset()
+    resp = client.post("/recommend", json=req)
+    assert resp.status_code == 200, f"status={resp.status_code} body={resp.text[:300]}"
+    body = resp.json()
+    assert body["breeds_after_hard_filters"] <= body["total_breeds_considered"]
+
+
+try:
+    _test_hard_filters_never_increase_count()
+    check("property: hard filters never increase breed count", True)
+except Exception as exc:  # noqa: BLE001
+    check("property: hard filters never increase breed count", False, detail=str(exc))
+
+# 17. Invalid trait_priority_ranking always returns 422
+_invalid_ranking_strategy = st.one_of(
+    # Right count, but not a valid permutation (duplicate trait names).
+    st.lists(st.sampled_from(ALL_TRAITS), min_size=6, max_size=6).filter(
+        lambda l: len(set(l)) != 6
+    ),
+    # Right count, but contains names outside the allowed trait set.
+    st.lists(
+        st.text(min_size=1, max_size=20).filter(lambda s: s not in ALL_TRAITS),
+        min_size=6,
+        max_size=6,
+    ),
+    # Wrong number of items entirely.
+    st.lists(st.sampled_from(ALL_TRAITS), min_size=0, max_size=10).filter(
+        lambda l: len(l) != 6
+    ),
+)
+
+
+@HYPOTHESIS_SETTINGS
+@given(ranking=_invalid_ranking_strategy)
+def _test_invalid_ranking_always_422(ranking):
+    limiter.reset()
+    req = base_request()
+    req["trait_priority_ranking"] = ranking
+    resp = client.post("/recommend", json=req)
+    assert resp.status_code == 422, f"ranking={ranking} status={resp.status_code} body={resp.text[:300]}"
+
+
+try:
+    _test_invalid_ranking_always_422()
+    check("property: invalid trait_priority_ranking always returns 422", True)
+except Exception as exc:  # noqa: BLE001
+    check("property: invalid trait_priority_ranking always returns 422", False, detail=str(exc))
+
+# 18. Zero-result guaranteed inputs return 200, never 500
+_zero_result_hard_filters_strategy = st.fixed_dictionaries(
+    {
+        "has_allergies": st.just(True),
+        "property_type": st.sampled_from(["apartment", "house"]),
+        "has_yard": st.booleans(),
+        "monthly_budget_usd": st.just(1),
+        "has_other_dogs": st.booleans(),
+        "has_cats": st.booleans(),
+        "has_kids": st.booleans(),
+        "has_elderly": st.booleans(),
+        "owner_experience": st.sampled_from(["first_time", "some", "experienced"]),
+        "noise_tolerance": st.sampled_from(["low", "medium", "high"]),
+        "max_size_category": st.sampled_from(
+            ["small", "medium", "large", "giant", "no_preference"]
+        ),
+        "size_strict": st.booleans(),
+    }
+)
+
+_zero_result_request_strategy = st.fixed_dictionaries(
+    {
+        "hard_filters": _zero_result_hard_filters_strategy,
+        "soft_context": _soft_context_strategy,
+        "trait_priority_ranking": _trait_ranking_strategy,
+    }
+)
+
+
+@HYPOTHESIS_SETTINGS
+@given(req=_zero_result_request_strategy)
+def _test_zero_results_returns_200(req):
+    limiter.reset()
+    resp = client.post("/recommend", json=req)
+    assert resp.status_code == 200, f"status={resp.status_code} body={resp.text[:300]}"
+    body = resp.json()
+    assert body["results"] == [], f"expected empty results, got {body['results']}"
+
+
+try:
+    _test_zero_results_returns_200()
+    check("property: guaranteed zero-survivor inputs always return 200 with empty results", True)
+except Exception as exc:  # noqa: BLE001
+    check(
+        "property: guaranteed zero-survivor inputs always return 200 with empty results",
+        False,
+        detail=str(exc),
+    )
+
 groq_patch.stop()
 db_patch.stop()
 
@@ -437,6 +636,30 @@ print(f"{len(passed)} passed, {len(failed)} failed")
 
 if failed:
     sys.exit(1)
+
+# --- Advisory performance benchmark (non-blocking) --------------------
+#
+# scripts/benchmark_backend.py owns the hard p95 < 200ms assertion (it exits
+# 1 and fails CI on its own, as a separate step). Here it's just a heads-up:
+# a slow p95 is printed as a warning but never fails validate_backend.py.
+try:
+    from scripts.benchmark_backend import P95_THRESHOLD_MS, print_summary, run_benchmark
+
+    benchmark_stats = run_benchmark()
+    print_summary(benchmark_stats)
+    if benchmark_stats["p95"] >= P95_THRESHOLD_MS:
+        print(
+            f"WARNING: benchmark p95 latency {benchmark_stats['p95']:.2f}ms exceeds "
+            f"{P95_THRESHOLD_MS:.0f}ms threshold. This is advisory only here — run "
+            f"scripts/benchmark_backend.py directly for the hard-failing check."
+        )
+    else:
+        print(
+            f"Benchmark OK: p95 latency {benchmark_stats['p95']:.2f}ms is under "
+            f"{P95_THRESHOLD_MS:.0f}ms"
+        )
+except Exception as exc:  # noqa: BLE001 - benchmark failures here are advisory only
+    print(f"WARNING: benchmark could not be run: {exc}")
 
 SENTINEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 SENTINEL_PATH.write_text("")

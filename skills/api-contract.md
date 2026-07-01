@@ -11,7 +11,7 @@ Read this file before writing any backend code for the `/recommend` endpoint —
 ---
 
 ## 2. Request Body Schema
-
+  
 ```json
 {
   "hard_filters": {

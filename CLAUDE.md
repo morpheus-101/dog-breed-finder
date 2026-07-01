@@ -156,6 +156,31 @@ ANTHROPIC_API_KEY=  # Anthropic API key (scripts only)
 
 ---
 
+## Development Workflow
+
+1. Before starting any new feature or fix, always sync staging to main first:
+   ```
+   bash scripts/sync_staging.sh
+   ```
+2. Make all changes directly on the staging branch — never commit directly to main.
+3. After changes are complete and `validate_backend.py` passes, push to staging:
+   ```
+   git push origin staging
+   ```
+4. CI runs automatically. Railway staging deploys after CI passes.
+5. Test on staging at https://frontend-staging-production-66b8.up.railway.app before opening a PR.
+6. Open PR from staging to main using gh CLI:
+   ```
+   gh pr create --title "feat/fix/chore: description" --base main
+   ```
+7. After PR is merged to main, always reset staging immediately:
+   ```
+   bash scripts/sync_staging.sh
+   ```
+8. Never use squash and merge for PRs — use Create a merge commit to keep staging and main better aligned and reduce divergence from semantic-release commits.
+
+---
+
 ## Skill Files
 
 Read these before working in their domain — do not guess:
@@ -173,6 +198,7 @@ Read these before working in their domain — do not guess:
 ## Session Rules for Claude Code
 
 - Read `CLAUDE.md` (this file) at the start of every session.
+- At the start of any session involving new feature work, check if staging is in sync with main by running `git log --oneline -3 origin/staging` and `git log --oneline -3 origin/main`. If they differ, run `bash scripts/sync_staging.sh` before proceeding.
 - Read the relevant skill file before writing any database or data-pipeline code.
 - Do not invent column names — consult `skills/data-ingestion.md`.
 - Do not add user data persistence under any circumstances.

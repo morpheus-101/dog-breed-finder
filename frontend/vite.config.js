@@ -10,6 +10,10 @@ export default defineConfig({
         target: 'http://localhost:8001',
         changeOrigin: true,
       },
+      '/filter-count': {
+        target: 'http://localhost:8001',
+        changeOrigin: true,
+      },
     },
   },
 })

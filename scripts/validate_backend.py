@@ -432,6 +432,46 @@ check(
 )
 limiter.reset()
 
+# 13. /filter-count — Layer 1 only, returns a valid breed count
+limiter.reset()
+resp = client.post("/filter-count", json={"hard_filters": base_request()["hard_filters"]})
+ok = resp.status_code == 200
+body = resp.json() if ok else {}
+check(
+    "filter-count: 200 with breed_count between 0 and total seeded breeds",
+    ok
+    and isinstance(body.get("breed_count"), int)
+    and 0 <= body["breed_count"] <= len(TEST_BREEDS)
+    and body.get("total_breeds_considered") == len(TEST_BREEDS),
+    detail=f"status={resp.status_code} body={resp.text[:300]}" if not ok else f"body={body}",
+)
+
+# 14. /filter-count agrees with /recommend's breeds_after_hard_filters for
+# the same hard_filters, and a stricter filter set never yields a higher count.
+limiter.reset()
+recommend_resp = client.post("/recommend", json=base_request())
+limiter.reset()
+count_resp = client.post("/filter-count", json={"hard_filters": base_request()["hard_filters"]})
+ok = recommend_resp.status_code == 200 and count_resp.status_code == 200
+check(
+    "filter-count: agrees with /recommend's breeds_after_hard_filters",
+    ok and count_resp.json()["breed_count"] == recommend_resp.json()["breeds_after_hard_filters"],
+    detail=f"count={count_resp.text[:200]} recommend={recommend_resp.text[:200]}",
+)
+
+limiter.reset()
+loose_resp = client.post("/filter-count", json={"hard_filters": base_request()["hard_filters"]})
+limiter.reset()
+strict_resp = client.post(
+    "/filter-count", json={"hard_filters": base_request(has_allergies=True)["hard_filters"]}
+)
+ok = loose_resp.status_code == 200 and strict_resp.status_code == 200
+check(
+    "filter-count: stricter hard_filters never increase the count",
+    ok and strict_resp.json()["breed_count"] <= loose_resp.json()["breed_count"],
+    detail=f"loose={loose_resp.text[:200]} strict={strict_resp.text[:200]}",
+)
+
 # --- Property-based tests (hypothesis) ---------------------------------
 #
 # These generate many random inputs per test rather than a single fixed

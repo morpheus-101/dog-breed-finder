@@ -189,6 +189,15 @@ class RecommendResponse(BaseModel):
     message: Optional[str] = None
 
 
+class FilterCountRequest(BaseModel):
+    hard_filters: HardFilters
+
+
+class FilterCountResponse(BaseModel):
+    breed_count: int
+    total_breeds_considered: int
+
+
 def _resolve_image_url(breed: dict) -> Optional[str]:
     return breed.get("image_url_1") or breed.get("image_url_2")
 
@@ -286,3 +295,21 @@ def recommend(request: Request, body: RecommendRequest, response: Response) -> d
         total_breeds_considered=total_before,
         breeds_after_hard_filters=total_after,
     ).model_dump(exclude={"message"})
+
+
+@app.post("/filter-count", response_model=None)
+@limiter.limit("30/minute")
+def filter_count(request: Request, body: FilterCountRequest) -> dict:
+    """Layer 1 only — lets the questionnaire show a live "N breeds match so
+    far" count without paying for Layer 2 scoring or a Groq call."""
+    os.environ.setdefault("DB_MODE", "local")
+
+    all_breeds = db.get_all_breeds()
+    _, total_before, total_after = filters.apply_hard_filters(
+        all_breeds, body.hard_filters.model_dump()
+    )
+
+    return FilterCountResponse(
+        breed_count=total_after,
+        total_breeds_considered=total_before,
+    ).model_dump()

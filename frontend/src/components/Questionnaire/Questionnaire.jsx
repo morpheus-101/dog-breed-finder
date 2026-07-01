@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuestionnaire } from '../../context/QuestionnaireContext'
+import { fetchFilterCount } from '../../api/filterCount'
 import ProgressBar from './ProgressBar'
+import BreedCountIndicator from './BreedCountIndicator'
 import Step1Housing from './steps/Step1Housing'
 import Step2Household from './steps/Step2Household'
 import Step3BudgetExperience from './steps/Step3BudgetExperience'
@@ -39,10 +41,36 @@ function isValidTraitRanking(ranking) {
 export default function Questionnaire({ onSubmit }) {
   const { formData } = useQuestionnaire()
   const [stepIndex, setStepIndex] = useState(0)
+  const [breedCount, setBreedCount] = useState(null)
+  const [totalBreeds, setTotalBreeds] = useState(null)
+  const debounceRef = useRef(null)
 
   const isFirstStep = stepIndex === 0
   const isLastStep = stepIndex === STEPS.length - 1
   const { Component } = STEPS[stepIndex]
+
+  const { hard_filters } = formData
+
+  // Debounced so a slider drag (e.g. monthly budget) doesn't fire a request
+  // per pixel — only after the user pauses. Keeps the previous count visible
+  // while the new one loads, and fails silently (count just stays stale) so a
+  // hiccup here never blocks the questionnaire.
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    debounceRef.current = setTimeout(() => {
+      fetchFilterCount(hard_filters)
+        .then((data) => {
+          setBreedCount(data.breed_count)
+          setTotalBreeds(data.total_breeds_considered)
+        })
+        .catch(() => {
+          // Keep showing the last known count rather than an error.
+        })
+    }, 300)
+
+    return () => clearTimeout(debounceRef.current)
+  }, [hard_filters])
 
   function goNext() {
     if (isLastStep) {
@@ -71,6 +99,7 @@ export default function Questionnaire({ onSubmit }) {
         totalSteps={STEPS.length}
         stepTitle={STEPS[stepIndex].title}
       />
+      <BreedCountIndicator count={breedCount} total={totalBreeds} />
 
       <Component />
 

@@ -56,8 +56,22 @@ def _configure_logging() -> None:
         from axiom_py import Client as AxiomClient
         from axiom_py.logging import AxiomHandler
 
+        # AxiomHandler.emit() flushes synchronously and does not catch
+        # shipping errors itself, so a bad dataset name or an unreachable
+        # Axiom API would otherwise raise out of every logger.info/warning
+        # call — including calls made deep inside request handling (e.g.
+        # httpx's own internal request logging) — and crash the request
+        # with an unrelated 500. Catch here so log shipping can never take
+        # down the app.
+        class _SafeAxiomHandler(AxiomHandler):
+            def emit(self, record: logging.LogRecord) -> None:
+                try:
+                    super().emit(record)
+                except Exception:
+                    self.handleError(record)
+
         axiom_client = AxiomClient(token=axiom_token)
-        axiom_handler = AxiomHandler(axiom_client, axiom_dataset)
+        axiom_handler = _SafeAxiomHandler(axiom_client, axiom_dataset)
         axiom_handler.setFormatter(JsonFormatter())
         root_logger.addHandler(axiom_handler)
 

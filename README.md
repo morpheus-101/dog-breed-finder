@@ -1,5 +1,7 @@
 # PawMatch
 
+[![CI/CD](https://github.com/morpheus-101/dog-breed-finder/actions/workflows/ci.yml/badge.svg)](https://github.com/morpheus-101/dog-breed-finder/actions/workflows/ci.yml)
+
 PawMatch is an AI-powered dog breed recommendation engine. A user works through a multi-step lifestyle questionnaire — housing, household, budget, daily routine, noise tolerance, and a drag-ranked set of personality traits — and gets back a ranked, explained shortlist of dog breeds suited to their actual life, not just a filtered table.
 
 What makes it technically interesting is the three-layer pipeline behind that shortlist: cheap, deterministic boolean elimination and weighted scoring run first to cut a 277-breed database down to a manageable shortlist, and only that shortlist — never the full table — is handed to an LLM for re-ranking and natural-language explanation. The app is fully stateless: no accounts, no stored user input, no database writes at runtime.

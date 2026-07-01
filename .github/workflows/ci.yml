@@ -1,0 +1,60 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-validation:
+    runs-on: ubuntu-latest
+    env:
+      GROQ_API_KEY: test-key
+      TURSO_URL: libsql://test.turso.io
+      TURSO_AUTH_TOKEN: test-token
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Create venv and install dependencies
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          pip install -r requirements.txt
+
+      - name: Install test dependencies
+        run: |
+          source venv/bin/activate
+          pip install fastapi uvicorn httpx pytest
+
+      - name: Run backend validation
+        run: |
+          source venv/bin/activate
+          python scripts/validate_backend.py
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    env:
+      VITE_API_URL: https://dog-breed-finder-production.up.railway.app
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build

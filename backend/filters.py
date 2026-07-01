@@ -1,5 +1,9 @@
 """Layer 1 — hard filter elimination. See skills/api-contract.md section 4."""
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 SIZE_ORDER = {"small": 0, "medium": 1, "large": 2, "giant": 3}
 
 
@@ -76,19 +80,31 @@ def apply_hard_filters(breeds: list[dict], hard_filters: dict) -> tuple[list[dic
     """Returns (filtered_breeds, total_before, total_after)."""
     total_before = len(breeds)
 
+    filter_steps = [
+        ("allergies", filter_allergies, (hard_filters["has_allergies"],)),
+        ("property_type", filter_property_type, (hard_filters["property_type"],)),
+        ("has_yard", filter_has_yard, (hard_filters["has_yard"],)),
+        ("budget", filter_budget, (hard_filters["monthly_budget_usd"],)),
+        ("has_other_dogs", filter_has_other_dogs, (hard_filters["has_other_dogs"],)),
+        ("has_cats", filter_has_cats, (hard_filters["has_cats"],)),
+        ("has_kids", filter_has_kids, (hard_filters["has_kids"],)),
+        ("has_elderly", filter_has_elderly, (hard_filters["has_elderly"],)),
+        ("owner_experience", filter_owner_experience, (hard_filters["owner_experience"],)),
+        ("noise_tolerance", filter_noise_tolerance, (hard_filters["noise_tolerance"],)),
+        (
+            "size_strict",
+            filter_size_strict,
+            (hard_filters["max_size_category"], hard_filters["size_strict"]),
+        ),
+    ]
+
     filtered = breeds
-    filtered = filter_allergies(filtered, hard_filters["has_allergies"])
-    filtered = filter_property_type(filtered, hard_filters["property_type"])
-    filtered = filter_has_yard(filtered, hard_filters["has_yard"])
-    filtered = filter_budget(filtered, hard_filters["monthly_budget_usd"])
-    filtered = filter_has_other_dogs(filtered, hard_filters["has_other_dogs"])
-    filtered = filter_has_cats(filtered, hard_filters["has_cats"])
-    filtered = filter_has_kids(filtered, hard_filters["has_kids"])
-    filtered = filter_has_elderly(filtered, hard_filters["has_elderly"])
-    filtered = filter_owner_experience(filtered, hard_filters["owner_experience"])
-    filtered = filter_noise_tolerance(filtered, hard_filters["noise_tolerance"])
-    filtered = filter_size_strict(
-        filtered, hard_filters["max_size_category"], hard_filters["size_strict"]
-    )
+    for name, filter_fn, args in filter_steps:
+        before = len(filtered)
+        filtered = filter_fn(filtered, *args)
+        logger.debug(
+            "filter_applied",
+            extra={"filter_name": name, "breeds_before": before, "breeds_after": len(filtered)},
+        )
 
     return filtered, total_before, len(filtered)

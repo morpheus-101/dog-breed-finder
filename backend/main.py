@@ -3,9 +3,14 @@
 See skills/api-contract.md for the authoritative /recommend contract.
 """
 
+import json
+import logging
 import os
+import sys
+import time
 from typing import Literal, Optional
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
@@ -13,7 +18,55 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
-from backend import db, filters, groq_client, scoring
+load_dotenv()
+
+# Attribute names present on every stdlib LogRecord — anything else on a
+# record came from `extra={...}` and should be surfaced in the JSON output.
+_STANDARD_LOG_RECORD_ATTRS = set(logging.LogRecord("", 0, "", 0, "", (), None).__dict__)
+
+
+class JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "timestamp": self.formatTime(record, "%Y-%m-%dT%H:%M:%S%z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        for key, value in record.__dict__.items():
+            if key not in _STANDARD_LOG_RECORD_ATTRS:
+                payload[key] = value
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(payload, default=str)
+
+
+def _configure_logging() -> None:
+    debug = os.environ.get("DEBUG", "").lower() == "true"
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG if debug else logging.INFO)
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(JsonFormatter())
+    root_logger.addHandler(stdout_handler)
+
+    axiom_token = os.environ.get("AXIOM_TOKEN")
+    axiom_dataset = os.environ.get("AXIOM_DATASET")
+    if axiom_token and axiom_dataset:
+        from axiom_py import Client as AxiomClient
+        from axiom_py.logging import AxiomHandler
+
+        axiom_client = AxiomClient(token=axiom_token)
+        axiom_handler = AxiomHandler(axiom_client, axiom_dataset)
+        axiom_handler.setFormatter(JsonFormatter())
+        root_logger.addHandler(axiom_handler)
+
+
+_configure_logging()
+
+logger = logging.getLogger(__name__)
+
+from backend import db, filters, groq_client, scoring  # noqa: E402
 
 VALID_TRAITS = {
     "energy_level",
@@ -129,6 +182,7 @@ def _resolve_image_url(breed: dict) -> Optional[str]:
 @app.post("/recommend", response_model=None)
 @limiter.limit("5/minute")
 def recommend(request: Request, body: RecommendRequest) -> dict:
+    start_time = time.perf_counter()
     os.environ.setdefault("DB_MODE", "local")
 
     all_breeds = db.get_all_breeds()
@@ -139,6 +193,16 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
     )
 
     if total_after == 0:
+        logger.info(
+            "request_complete",
+            extra={
+                "breeds_before_filters": total_before,
+                "breeds_after_filters": 0,
+                "breeds_sent_to_groq": 0,
+                "groq_succeeded": None,
+                "response_time_ms": round((time.perf_counter() - start_time) * 1000),
+            },
+        )
         return RecommendResponse(
             results=[],
             total_breeds_considered=total_before,
@@ -153,7 +217,9 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
         body.hard_filters.size_strict,
     )
 
-    llm_rankings = groq_client.get_llm_rankings(shortlisted, body.model_dump())
+    llm_rankings, groq_succeeded = groq_client.get_llm_rankings(
+        shortlisted, body.model_dump()
+    )
 
     results = []
     for ranked in llm_rankings:
@@ -171,6 +237,17 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
                 ),
             )
         )
+
+    logger.info(
+        "request_complete",
+        extra={
+            "breeds_before_filters": total_before,
+            "breeds_after_filters": total_after,
+            "breeds_sent_to_groq": len(shortlisted),
+            "groq_succeeded": groq_succeeded,
+            "response_time_ms": round((time.perf_counter() - start_time) * 1000),
+        },
+    )
 
     return RecommendResponse(
         results=results,

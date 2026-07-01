@@ -125,7 +125,9 @@ def _fallback_results(top_breeds: list[dict]) -> list[dict]:
     ]
 
 
-def get_llm_rankings(shortlisted_breeds: list[dict], request_body: dict) -> list[dict]:
+def get_llm_rankings(
+    shortlisted_breeds: list[dict], request_body: dict
+) -> tuple[list[dict], bool]:
     """Re-ranks the Layer 2 shortlist via Groq and generates per-breed explanations.
 
     Args:
@@ -135,12 +137,13 @@ def get_llm_rankings(shortlisted_breeds: list[dict], request_body: dict) -> list
             are used to build the Groq prompt.
 
     Returns:
-        list of dicts with breed_name, rank, match_explanation, in ranked order.
-        Falls back to Layer 2 order with a generic explanation if Groq fails or
-        returns malformed output — never raises.
+        (results, groq_succeeded) — results is a list of dicts with breed_name,
+        rank, match_explanation, in ranked order. Falls back to Layer 2 order
+        with a generic explanation if Groq fails or returns malformed output —
+        never raises.
     """
     if not shortlisted_breeds:
-        return []
+        return [], True
 
     soft_context = request_body["soft_context"]
     trait_priority_ranking = request_body["trait_priority_ranking"]
@@ -152,7 +155,11 @@ def get_llm_rankings(shortlisted_breeds: list[dict], request_body: dict) -> list
         merged = _merge_with_input(parsed, shortlisted_breeds)
         if not merged:
             raise ValueError("No Groq breed names matched the input shortlist")
-        return merged
+        logger.info("groq_success", extra={"breeds_ranked": len(merged)})
+        return merged, True
     except Exception as exc:
-        logger.warning("Groq Layer 3 call failed, falling back to Layer 2 order: %s", exc)
-        return _fallback_results(shortlisted_breeds)
+        logger.warning(
+            "groq_fallback",
+            extra={"error_type": type(exc).__name__, "error_message": str(exc)},
+        )
+        return _fallback_results(shortlisted_breeds), False

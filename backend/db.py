@@ -72,9 +72,7 @@ def _coerce_turso_value(col_name: str, value):
             return int(value)
         except (TypeError, ValueError):
             logger.warning(
-                "Could not cast column %r value %r to int; returning as-is",
-                col_name,
-                value,
+                "coercion_warning", extra={"column": col_name, "value": str(value)}
             )
             return value
     return value

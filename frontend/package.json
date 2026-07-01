@@ -14,10 +14,15 @@
     "react-dom": "^19.2.7"
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^12.0.9",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.3",
+    "conventional-changelog-conventionalcommits": "^8.0.0",
     "oxlint": "^1.71.0",
+    "semantic-release": "^24.2.9",
     "vite": "^8.1.1"
   }
 }

@@ -331,6 +331,23 @@ The effect is that schema details, API contracts, and design constraints live in
 
 ---
 
+## Releases
+
+Releases are fully automated with [semantic-release](https://github.com/semantic-release/semantic-release): every push to `main` that passes CI is analyzed for release-worthy commits, versioned, changelogged, and published as a GitHub Release automatically. See the [Releases page](https://github.com/morpheus-101/dog-breed-finder/releases) for the version history, and [`CHANGELOG.md`](CHANGELOG.md) for the generated changelog.
+
+This only works because the project uses [Conventional Commits](https://www.conventionalcommits.org/) — commit message prefixes are what semantic-release reads to decide whether a release happens and what version bump it gets:
+
+| Prefix | Meaning | Release |
+|---|---|---|
+| `feat:` | New feature | Minor version bump |
+| `fix:` | Bug fix | Patch version bump |
+| `chore:` | Maintenance, no user-facing change | No release |
+| `docs:` | Documentation only | No release |
+| `data:` | Dataset or pipeline change | Patch version bump |
+| `perf:` | Performance improvement | Patch version bump |
+
+---
+
 ## What's Not Included
 
 This is a v1, and some things were deliberately left out of scope:

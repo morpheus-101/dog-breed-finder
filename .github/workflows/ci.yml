@@ -38,6 +38,11 @@ jobs:
           source venv/bin/activate
           python scripts/validate_backend.py
 
+      - name: Run backend performance benchmark
+        run: |
+          source venv/bin/activate
+          python scripts/benchmark_backend.py
+
   frontend-build:
     runs-on: ubuntu-latest
     env:

@@ -11,7 +11,7 @@ import time
 from typing import Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -195,7 +195,7 @@ def _resolve_image_url(breed: dict) -> Optional[str]:
 
 @app.post("/recommend", response_model=None)
 @limiter.limit("5/minute")
-def recommend(request: Request, body: RecommendRequest) -> dict:
+def recommend(request: Request, body: RecommendRequest, response: Response) -> dict:
     start_time = time.perf_counter()
     os.environ.setdefault("DB_MODE", "local")
 
@@ -207,6 +207,8 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
     )
 
     if total_after == 0:
+        pipeline_ms = round((time.perf_counter() - start_time) * 1000)
+        response.headers["X-Pipeline-Ms"] = str(pipeline_ms)
         logger.info(
             "request_complete",
             extra={
@@ -215,6 +217,7 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
                 "breeds_sent_to_groq": 0,
                 "groq_succeeded": None,
                 "response_time_ms": round((time.perf_counter() - start_time) * 1000),
+                "pipeline_ms": pipeline_ms,
             },
         )
         return RecommendResponse(
@@ -231,9 +234,16 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
         body.hard_filters.size_strict,
     )
 
+    # Layer 1 + Layer 2 finish here; Groq (Layer 3) is timed separately below
+    # so it can be excluded from X-Pipeline-Ms, which is meant to reflect only
+    # the local, non-network part of the pipeline.
+    pipeline_ms_so_far = time.perf_counter() - start_time
+
+    groq_start = time.perf_counter()
     llm_rankings, groq_succeeded = groq_client.get_llm_rankings(
         shortlisted, body.model_dump()
     )
+    groq_elapsed = time.perf_counter() - groq_start
 
     results = []
     for ranked in llm_rankings:
@@ -252,6 +262,13 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
             )
         )
 
+    # Time spent building `results` after Groq returns is part of the local
+    # pipeline too (it's not Groq/network time), so fold it into pipeline_ms.
+    pipeline_ms = round(
+        (pipeline_ms_so_far + (time.perf_counter() - groq_start - groq_elapsed)) * 1000
+    )
+    response.headers["X-Pipeline-Ms"] = str(pipeline_ms)
+
     logger.info(
         "request_complete",
         extra={
@@ -260,6 +277,7 @@ def recommend(request: Request, body: RecommendRequest) -> dict:
             "breeds_sent_to_groq": len(shortlisted),
             "groq_succeeded": groq_succeeded,
             "response_time_ms": round((time.perf_counter() - start_time) * 1000),
+            "pipeline_ms": pipeline_ms,
         },
     )
 

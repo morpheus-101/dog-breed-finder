@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -163,6 +164,18 @@ assert len(TEST_BREEDS) >= 20, "need at least 20 seeded test breeds"
 db_patch = patch.object(backend_db, "get_all_breeds", return_value=TEST_BREEDS)
 db_patch.start()
 
+_TEST_BREEDS_BY_NAME = {b["breed_name"]: b for b in TEST_BREEDS}
+
+
+def _mock_get_breed_by_name(breed_name: str):
+    return _TEST_BREEDS_BY_NAME.get(breed_name)
+
+
+get_breed_patch = patch.object(
+    backend_db, "get_breed_by_name", side_effect=_mock_get_breed_by_name
+)
+get_breed_patch.start()
+
 client = TestClient(app)
 
 # The /recommend endpoint is rate-limited (5/minute per IP, see backend/main.py).
@@ -203,6 +216,41 @@ ALL_TRAITS = [
 ]
 
 SENTINEL_PATH = PROJECT_ROOT / ".claude" / ".validate_backend_passed"
+
+# --- Optional workflow_state.py integration ----------------------------
+#
+# scripts/workflow_state.py tracks the issue->PR workflow as a separate state
+# machine that this validation loop is just one step of (see
+# skills/issue-to-pr.md). Only auto-advance/fail that state machine when a
+# session for it actually exists, so standalone validate_backend.py runs
+# (the common case, e.g. production-debug.md or ad-hoc backend work) behave
+# exactly as before.
+WORKFLOW_STATE_FILE = PROJECT_ROOT / ".claude" / "workflow_state.json"
+WORKFLOW_STATE_SCRIPT = PROJECT_ROOT / "scripts" / "workflow_state.py"
+
+
+def _workflow_current_state() -> str | None:
+    if not WORKFLOW_STATE_FILE.exists():
+        return None
+    try:
+        return json.loads(WORKFLOW_STATE_FILE.read_text()).get("current_state")
+    except json.JSONDecodeError:
+        return None
+
+
+def _workflow_advance(to_state: str) -> None:
+    subprocess.run(
+        [sys.executable, str(WORKFLOW_STATE_SCRIPT), "advance", "--to", to_state],
+        cwd=PROJECT_ROOT,
+    )
+
+
+def _workflow_fail(at_state: str) -> None:
+    subprocess.run(
+        [sys.executable, str(WORKFLOW_STATE_SCRIPT), "fail", "--at", at_state],
+        cwd=PROJECT_ROOT,
+    )
+
 
 passed = []
 failed = []
@@ -472,6 +520,35 @@ check(
     detail=f"loose={loose_resp.text[:200]} strict={strict_resp.text[:200]}",
 )
 
+# 19. GET /breed/{breed_name} — happy path returns the full breed row
+resp = client.get("/breed/Golden Retriever")
+ok = resp.status_code == 200
+body = resp.json() if ok else {}
+check(
+    "GET /breed/Golden Retriever: 200 with matching breed data",
+    ok and body.get("breed_name") == "Golden Retriever" and body == _TEST_BREEDS_BY_NAME["Golden Retriever"],
+    detail=f"status={resp.status_code} body={resp.text[:300]}",
+)
+
+# 20. GET /breed/{breed_name} — unknown breed returns 404 with a clear message
+resp = client.get("/breed/nonexistent")
+ok = resp.status_code == 404
+check(
+    "GET /breed/nonexistent: 404 with clear message",
+    ok and "not found" in resp.json().get("detail", "").lower(),
+    detail=f"status={resp.status_code} body={resp.text[:300]}",
+)
+
+# 21. GET /breed/{breed_name} — name with special characters (space, apostrophe) round-trips
+resp = client.get("/breed/Cavalier King Charles Spaniel")
+ok = resp.status_code == 200
+body = resp.json() if ok else {}
+check(
+    "GET /breed with spaces in name: 200 with matching breed data",
+    ok and body.get("breed_name") == "Cavalier King Charles Spaniel",
+    detail=f"status={resp.status_code} body={resp.text[:300]}",
+)
+
 # --- Property-based tests (hypothesis) ---------------------------------
 #
 # These generate many random inputs per test rather than a single fixed
@@ -670,11 +747,16 @@ except Exception as exc:  # noqa: BLE001
 
 groq_patch.stop()
 db_patch.stop()
+get_breed_patch.stop()
 
 print()
 print(f"{len(passed)} passed, {len(failed)} failed")
 
 if failed:
+    if _workflow_current_state() is not None:
+        _workflow_fail("validating_backend")
+        if _workflow_current_state() == "validating_backend":
+            _workflow_advance("fixing_backend")
     sys.exit(1)
 
 # --- Advisory performance benchmark (non-blocking) --------------------
@@ -703,4 +785,9 @@ except Exception as exc:  # noqa: BLE001 - benchmark failures here are advisory 
 
 SENTINEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 SENTINEL_PATH.write_text("")
+
+_workflow_state_now = _workflow_current_state()
+if _workflow_state_now in ("implementing", "fixing_backend"):
+    _workflow_advance("validating_frontend")
+
 sys.exit(0)

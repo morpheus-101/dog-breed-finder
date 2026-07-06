@@ -1,15 +1,18 @@
 import { useState } from 'react'
+import { Route, Routes, useNavigate } from 'react-router-dom'
 import { QuestionnaireProvider, useQuestionnaire } from './context/QuestionnaireContext'
 import { fetchRecommendations } from './api/recommend'
 import Questionnaire from './components/Questionnaire/Questionnaire'
 import LoadingState from './components/Loading/LoadingState'
 import ResultsPage from './components/Results/ResultsPage'
 import ErrorState from './components/Results/ErrorState'
+import BreedDetailPage from './components/BreedDetail/BreedDetailPage'
 import styles from './App.module.css'
 
 // view: 'questionnaire' | 'loading' | 'results' | 'error'
 function AppContent() {
   const { resetFormData } = useQuestionnaire()
+  const navigate = useNavigate()
   const [view, setView] = useState('questionnaire')
   const [results, setResults] = useState([])
   const [emptyMessage, setEmptyMessage] = useState('')
@@ -49,6 +52,7 @@ function AppContent() {
     setLastSubmittedData(null)
     setIsRateLimited(false)
     setView('questionnaire')
+    navigate('/')
   }
 
   return (
@@ -61,16 +65,28 @@ function AppContent() {
       </header>
 
       <main className={styles.main}>
-        {view === 'questionnaire' && <Questionnaire onSubmit={submitQuestionnaire} />}
-        {view === 'loading' && <LoadingState />}
-        {view === 'results' && (
-          <ResultsPage
-            results={results}
-            message={emptyMessage}
-            onAdjustAnswers={adjustAnswers}
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <>
+                {view === 'questionnaire' && <Questionnaire onSubmit={submitQuestionnaire} />}
+                {view === 'loading' && <LoadingState />}
+                {view === 'results' && (
+                  <ResultsPage
+                    results={results}
+                    message={emptyMessage}
+                    onAdjustAnswers={adjustAnswers}
+                  />
+                )}
+                {view === 'error' && (
+                  <ErrorState onRetry={retry} rateLimited={isRateLimited} />
+                )}
+              </>
+            }
           />
-        )}
-        {view === 'error' && <ErrorState onRetry={retry} rateLimited={isRateLimited} />}
+          <Route path="/breed/:breedName" element={<BreedDetailPage />} />
+        </Routes>
       </main>
     </div>
   )

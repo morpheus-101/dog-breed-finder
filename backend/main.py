@@ -11,7 +11,7 @@ import time
 from typing import Literal, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -295,6 +295,22 @@ def recommend(request: Request, body: RecommendRequest, response: Response) -> d
         total_breeds_considered=total_before,
         breeds_after_hard_filters=total_after,
     ).model_dump(exclude={"message"})
+
+
+@app.get("/breed/{breed_name}", response_model=None)
+@limiter.limit("30/minute")
+def get_breed(request: Request, breed_name: str) -> dict:
+    """Full database row for a single breed. FastAPI URL-decodes the path
+    parameter automatically, so breed names with spaces/apostrophes (e.g.
+    "Golden Retriever", "Wirehaired Pointing Griffon") are matched as-is."""
+    os.environ.setdefault("DB_MODE", "local")
+
+    breed = db.get_breed_by_name(breed_name)
+    if breed is None:
+        raise HTTPException(
+            status_code=404, detail=f"Breed '{breed_name}' not found"
+        )
+    return breed
 
 
 @app.post("/filter-count", response_model=None)

@@ -5,4 +5,5 @@ __pycache__/
 breeds.db
 .DS_Store
 .claude/.validate_backend_passed
+.claude/workflow_state.json
 skills/

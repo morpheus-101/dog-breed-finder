@@ -5,8 +5,35 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash scripts/stop_hook_validate_backend.sh",
+            "command": "cd /Users/rishikeshdhayarkar/dog-breed-finder && bash scripts/stop_hook_validate_backend.sh",
             "statusMessage": "Validating backend changes..."
+          },
+          {
+            "type": "command",
+            "command": "cd /Users/rishikeshdhayarkar/dog-breed-finder && bash scripts/stop_hook_workflow_require.sh",
+            "statusMessage": "Checking issue-to-PR workflow state..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/rishikeshdhayarkar/dog-breed-finder && python3 scripts/block_main_push.py",
+            "statusMessage": "Checking workflow guard on git push/merge..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd /Users/rishikeshdhayarkar/dog-breed-finder && python3 scripts/session_start_workflow_check.py"
           }
         ]
       }

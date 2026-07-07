@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import styles from './BreedCard.module.css'
 
 export default function BreedCard({ breed }) {
@@ -7,7 +8,7 @@ export default function BreedCard({ breed }) {
   const showImage = image_url && !imageFailed
 
   return (
-    <article className={styles.card}>
+    <Link to={`/breed/${encodeURIComponent(breed_name)}`} className={styles.card}>
       <div className={styles.imageWrapper}>
         {showImage ? (
           <img
@@ -43,7 +44,7 @@ export default function BreedCard({ breed }) {
           </div>
         </dl>
       </div>
-    </article>
+    </Link>
   )
 }
 

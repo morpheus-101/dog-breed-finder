@@ -4,6 +4,7 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
+from typing import Optional
 
 import httpx
 from dotenv import load_dotenv
@@ -88,6 +89,55 @@ def _get_all_breeds_local() -> list[dict]:
         conn.close()
 
 
+def _get_breed_by_name_local(breed_name: str) -> Optional[dict]:
+    conn = sqlite3.connect(LOCAL_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            "SELECT * FROM breeds WHERE breed_name = ?", (breed_name,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _get_breed_by_name_turso(breed_name: str) -> Optional[dict]:
+    turso_url = os.environ["TURSO_URL"]
+    turso_auth_token = os.environ["TURSO_AUTH_TOKEN"]
+
+    http_url = turso_url.replace("libsql://", "https://")
+    response = httpx.post(
+        f"{http_url}/v2/pipeline",
+        headers={"Authorization": f"Bearer {turso_auth_token}"},
+        json={
+            "requests": [
+                {
+                    "type": "execute",
+                    "stmt": {
+                        "sql": "SELECT * FROM breeds WHERE breed_name = ?",
+                        "args": [{"type": "text", "value": breed_name}],
+                    },
+                },
+                {"type": "close"},
+            ]
+        },
+    )
+    response.raise_for_status()
+    result = response.json()
+
+    result_set = result["results"][0]["response"]["result"]
+    columns = [col["name"] for col in result_set["cols"]]
+    rows = result_set["rows"]
+
+    if not rows:
+        return None
+
+    return {
+        col_name: _coerce_turso_value(col_name, cell.get("value"))
+        for col_name, cell in zip(columns, rows[0])
+    }
+
+
 def _get_all_breeds_turso() -> list[dict]:
     turso_url = os.environ["TURSO_URL"]
     turso_auth_token = os.environ["TURSO_AUTH_TOKEN"]
@@ -125,3 +175,11 @@ def get_all_breeds() -> list[dict]:
     if db_mode == "turso":
         return _get_all_breeds_turso()
     return _get_all_breeds_local()
+
+
+def get_breed_by_name(breed_name: str) -> Optional[dict]:
+    """Returns a single breed row as a dict, or None if breed_name is not found."""
+    db_mode = os.environ.get("DB_MODE", "local")
+    if db_mode == "turso":
+        return _get_breed_by_name_turso(breed_name)
+    return _get_breed_by_name_local(breed_name)
